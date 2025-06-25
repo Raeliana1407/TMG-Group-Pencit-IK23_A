@@ -15,7 +15,7 @@ class ImageProcessorApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Digital Image Processor")
+        self.root.title("TMG Group-Citra Pro ITH")
         self.root.geometry("1280x720")
         self.root.configure(bg=self.BG_COLOR)
 
