@@ -4,6 +4,8 @@ from PIL import Image, ImageTk
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+import os
+from datetime import datetime
 
 class ImageProcessorApp:
     # --- Palet Warna ---
@@ -15,7 +17,7 @@ class ImageProcessorApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("TMG Group-Citra Pro ITH")
+        self.root.title("Digital Image Processor")
         self.root.geometry("1280x720")
         self.root.configure(bg=self.BG_COLOR)
 
@@ -25,6 +27,7 @@ class ImageProcessorApp:
         self.second_image_for_logic = None
         self.selected_process = tk.StringVar()
         self.status_text = tk.StringVar(value="Belum ada proses.")
+        self.original_filename = "" # Untuk menyimpan nama file asli
 
         # --- Layout Utama ---
         control_frame = tk.Frame(self.root, width=320, bg=self.FRAME_COLOR)
@@ -33,23 +36,16 @@ class ImageProcessorApp:
 
         image_frame = tk.Frame(self.root, bg=self.BG_COLOR)
         image_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 10), pady=10)
-
-        # --- PERBAIKAN TATA LETAK DIMULAI DI SINI ---
-        # Menggunakan 'grid' untuk menempatkan gambar bersebelahan (kiri-kanan)
         
-        # Konfigurasi grid agar kedua kolom berbagi ruang secara merata
         image_frame.rowconfigure(0, weight=1)
         image_frame.columnconfigure(0, weight=1)
         image_frame.columnconfigure(1, weight=1)
 
-        # Panel untuk gambar asli (kiri)
         self.panel_original = tk.Label(image_frame, text="Original Image", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, font=('Arial', 12))
         self.panel_original.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=0)
 
-        # Panel untuk gambar hasil (kanan)
         self.panel_processed = tk.Label(image_frame, text="Processed Result", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, font=('Arial', 12))
         self.panel_processed.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
-        # --- PERBAIKAN TATA LETAK SELESAI ---
         
         status_bar = tk.Label(self.root, textvariable=self.status_text, bd=1, relief=tk.SUNKEN, anchor=tk.W, bg=self.FRAME_COLOR, fg=self.TEXT_COLOR)
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -59,9 +55,15 @@ class ImageProcessorApp:
     def create_sidebar_controls(self, parent_frame):
         tk.Label(parent_frame, text="Image Processor", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, font=('Arial', 16, 'bold')).pack(pady=10)
 
-        self.create_styled_button(parent_frame, "Upload Image", self.load_image).pack(fill=tk.X, pady=10, padx=10)
+        file_button_frame = tk.Frame(parent_frame, bg=self.FRAME_COLOR)
+        file_button_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        tk.Label(parent_frame, text="Select Process:", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, font=('Arial', 10)).pack(anchor="w", padx=10)
+        self.create_styled_button(file_button_frame, "Upload Image", self.load_image).pack(fill=tk.X, pady=(0, 5))
+        
+        self.create_styled_button(file_button_frame, "Simpan Gambar Asli", self.save_original_image).pack(fill=tk.X, pady=2)
+        self.create_styled_button(file_button_frame, "Simpan Gambar Hasil", self.save_processed_image).pack(fill=tk.X, pady=2)
+        
+        tk.Label(parent_frame, text="Select Process:", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, font=('Arial', 10)).pack(anchor="w", padx=10, pady=(15, 0))
         
         processes = [
             "Grayscale", "Biner (Threshold)", "Atur Kecerahan", 
@@ -80,18 +82,14 @@ class ImageProcessorApp:
         self.threshold_label = tk.Label(self.options_frame, text="Threshold Value:", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR)
         self.threshold_scale = Scale(self.options_frame, from_=0, to=255, orient=tk.HORIZONTAL, bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, troughcolor='#bdc3c7', highlightthickness=0)
         self.threshold_scale.set(128)
-
         self.brightness_label = tk.Label(self.options_frame, text="Brightness Value:", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR)
         self.brightness_scale = Scale(self.options_frame, from_=-100, to=100, orient=tk.HORIZONTAL, bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, troughcolor='#bdc3c7', highlightthickness=0)
-        
         self.canny_t1_label = tk.Label(self.options_frame, text="Canny Threshold 1 (Low):", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR)
         self.canny_t1_scale = Scale(self.options_frame, from_=0, to=250, orient=tk.HORIZONTAL, bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, troughcolor='#bdc3c7', highlightthickness=0)
         self.canny_t1_scale.set(100)
-        
         self.canny_t2_label = tk.Label(self.options_frame, text="Canny Threshold 2 (High):", bg=self.FRAME_COLOR, fg=self.TEXT_COLOR)
         self.canny_t2_scale = Scale(self.options_frame, from_=0, to=500, orient=tk.HORIZONTAL, bg=self.FRAME_COLOR, fg=self.TEXT_COLOR, troughcolor='#bdc3c7', highlightthickness=0)
         self.canny_t2_scale.set(200)
-
         self.logic_info_label = tk.Label(self.options_frame, text="Operasi ini membutuhkan gambar kedua. Jika belum ada, Anda akan diminta untuk meng-upload-nya.", wraplength=280, bg=self.FRAME_COLOR, fg="#f1c40f")
         
         self.create_styled_button(parent_frame, "Process Image", self.execute_process).pack(fill=tk.X, pady=10, padx=10)
@@ -155,9 +153,8 @@ class ImageProcessorApp:
         image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB) if not is_gray else cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
         pil_image = Image.fromarray(image_rgb)
         
-        # Penyesuaian ukuran gambar agar sesuai dengan panelnya
         panel_w, panel_h = panel.winfo_width(), panel.winfo_height()
-        if panel_w > 1 and panel_h > 1: # Pastikan panel sudah dirender
+        if panel_w > 1 and panel_h > 1:
             pil_image.thumbnail((panel_w, panel_h-4), Image.Resampling.LANCZOS)
 
         tk_image = ImageTk.PhotoImage(pil_image)
@@ -168,10 +165,10 @@ class ImageProcessorApp:
         path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp")])
         if path:
             self.original_image = cv2.imread(path)
-            # Tunda display agar panel sempat di-render ukurannya
+            self.original_filename = os.path.basename(path) # Simpan nama file
             self.root.after(100, lambda: self.display_image(self.original_image, self.panel_original))
             self.panel_processed.config(image='', text="Hasil Proses")
-            self.panel_processed.image = None
+            self.processed_image = None
             self.second_image_for_logic = None
             self.status_text.set("Gambar berhasil di-upload.")
             self.process_combobox.config(state='readonly')
@@ -182,7 +179,60 @@ class ImageProcessorApp:
         if path:
             self.second_image_for_logic = cv2.imread(path)
             messagebox.showinfo("Info", "Gambar kedua berhasil dimuat untuk operasi logika.")
-    
+            
+    # --- FUNGSI SIMPAN OTOMATIS (MODIFIKASI) ---
+    def save_original_image(self):
+        if self.original_image is None:
+            messagebox.showerror("Error", "Tidak ada gambar asli untuk disimpan.")
+            return
+            
+        try:
+            # Buat path folder
+            folder_path = os.path.join("images", "gambar_asli")
+            os.makedirs(folder_path, exist_ok=True)
+            
+            # Buat nama file yang unik
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename, file_extension = os.path.splitext(self.original_filename)
+            save_name = f"{filename}_{timestamp}{file_extension}"
+            
+            full_path = os.path.join(folder_path, save_name)
+            
+            # Simpan gambar
+            cv2.imwrite(full_path, self.original_image)
+            messagebox.showinfo("Sukses", f"Gambar asli berhasil disimpan di:\n{full_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal menyimpan gambar: {e}")
+
+    def save_processed_image(self):
+        if self.processed_image is None:
+            messagebox.showerror("Error", "Tidak ada gambar hasil untuk disimpan.")
+            return
+
+        operation_name = self.selected_process.get()
+        if not operation_name or "Histogram" in operation_name:
+            messagebox.showerror("Error", "Pilih operasi yang valid untuk menyimpan gambar hasil.")
+            return
+
+        try:
+            # Buat path folder
+            folder_path = os.path.join("images", "gambar_hasil")
+            os.makedirs(folder_path, exist_ok=True)
+
+            # Buat nama file yang deskriptif dan unik
+            sanitized_op_name = operation_name.replace(" ", "_").replace("(", "").replace(")", "").lower()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename, file_extension = os.path.splitext(self.original_filename)
+            save_name = f"{filename}_{sanitized_op_name}_{timestamp}.png"
+
+            full_path = os.path.join(folder_path, save_name)
+
+            # Simpan gambar
+            cv2.imwrite(full_path, self.processed_image)
+            messagebox.showinfo("Sukses", f"Gambar hasil berhasil disimpan di:\n{full_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal menyimpan gambar: {e}")
+
     # --- FUNGSI-FUNGSI PEMROSESAN ---
     def apply_grayscale(self):
         gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
@@ -251,6 +301,7 @@ class ImageProcessorApp:
         self.display_image(self.processed_image, self.panel_processed)
 
     def show_grayscale_histogram(self):
+        if not self.check_image_loaded(): return
         gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
         plt.style.use('seaborn-v0_8-darkgrid')
         plt.figure("Histogram Grayscale")
@@ -262,6 +313,7 @@ class ImageProcessorApp:
         plt.show()
 
     def show_rgb_histogram(self):
+        if not self.check_image_loaded(): return
         plt.style.use('seaborn-v0_8-darkgrid')
         plt.figure("Histogram RGB")
         plt.title("Histogram RGB")
